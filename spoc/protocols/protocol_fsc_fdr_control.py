@@ -27,11 +27,13 @@
 from os.path import abspath
 import numpy as np
 
+from pwem.emlib.image import ImageHandler
 from pwem.objects import FSC
 from pwem.protocols import ProtAnalysis3D
 
 from pyworkflow.protocol import PointerParam, BooleanParam, FloatParam, IntParam, StringParam
 from pyworkflow import BETA
+import pyworkflow.utils as pwutils
 
 import spoc
 
@@ -72,16 +74,26 @@ class ProtFscFdrControl(ProtAnalysis3D):
 
     # --------------------------- INSERT steps functions ------------------------
     def _insertAllSteps(self):
-
+        self._insertFunctionStep(self.convertInputStep)
         self._insertFunctionStep(self.computeControlStep)
         self._insertFunctionStep(self.createOutputStep)
 
     # --------------------------- STEPS functions -------------------------------
+    def convertInputStep(self):
+        ih = ImageHandler()
+        file_halfOne = self.halfOne.get().getFileName()
+        file_halfTwo = self.halfTwo.get().getFileName()
+        if pwutils.getExt(file_halfOne) == '.mrc':
+            file_halfOne += ':mrc'
+        if pwutils.getExt(file_halfTwo) == '.mrc':
+            file_halfTwo += ':mrc'
+        ih.convert(file_halfOne, self._getExtraPath('halfone.mrc'))
+        ih.convert(file_halfTwo, self._getExtraPath('halftwo.mrc'))
+
     def computeControlStep(self):
-        args = '--halfmap1 %s --halfmap2 %s --apix %f --symmetry %s' % (abspath(self.halfOne.get().getFileName()),
-                                                                        abspath(self.halfTwo.get().getFileName()),
-                                                                        self.halfOne.get().getSamplingRate(),
-                                                                        self.sym.get().upper())
+        args = '--halfmap1 halfone.mrc --halfmap2 halftwo.mrc' \
+               ' --apix %f --symmetry %s' % (self.halfOne.get().getSamplingRate(),
+                                             self.sym.get().upper())
 
         if self.localRes.get():
             args += '-localResolutions '
