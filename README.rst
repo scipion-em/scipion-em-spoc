@@ -45,11 +45,7 @@ To check the installation, simply run one of the following Scipion tests:
 
 .. code-block::
 
-   scipion3 tests emantomo.tests.test_protocols_emantomo.TestEmanTomoTempMatch
-   scipion3 tests emantomo.tests.test_protocols_emantomo.TestEmanTomoSubtomogramRefinement
-   scipion3 tests emantomo.tests.test_protocols_emantomo.TestEmanTomoReconstruction
-   scipion3 tests emantomo.tests.test_protocols_emantomo.TestEmanTomoInitialModel
-   scipion3 tests emantomo.tests.test_protocols_emantomo.TestEmanTomoExtraction
+   No test avalaible yet
 
 A complete list of tests can also be seen by executing ``scipion test --show --grep emantomo``
 
