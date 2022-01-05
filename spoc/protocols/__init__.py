@@ -23,3 +23,5 @@
 # *  e-mail address 'scipion@cnb.csic.es'
 # *
 # **************************************************************************
+
+from .protocol_fsc_fdr_control import ProtFscFdrControl

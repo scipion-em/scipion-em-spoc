@@ -73,8 +73,8 @@ class Plugin(pwem.Plugin):
     @classmethod
     def getProgram(cls, program):
         """ Return the program binary that will be used. """
-        program = os.path.join(cls.getHome(), program)
-        return '%(program)s ' % locals()
+        program = os.path.join(cls.getHome('spoc-source'), program)
+        return 'python %(program)s ' % locals()
 
     @classmethod
     def getSpocCommand(cls, program, args):
