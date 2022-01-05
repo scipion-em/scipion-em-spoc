@@ -45,7 +45,7 @@ To check the installation, simply run one of the following Scipion tests:
 
 .. code-block::
 
-   No test avalaible yet
+   scipion3 tests spoc.tests.test_protocols_spoc.TestFscFdrControl
 
 A complete list of tests can also be seen by executing ``scipion test --show --grep emantomo``
 
