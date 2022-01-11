@@ -2,7 +2,7 @@
 SPOC plugin
 ========================
 
-This plugin provide wrappers around several programs of `SPOC <https://github.com/MaximilianBeckers/SPOC>`_ tomography software suite.
+This plugin provide wrappers around several programs of `SPOC <https://github.com/MaximilianBeckers/SPOC>`_.
 
 +------------------+------------------+
 | stable: |stable| | devel: | |devel| |
