@@ -28,7 +28,6 @@ import os
 
 import pwem
 import pyworkflow.utils as pwutils
-from scipion.install.funcs import VOID_TGZ
 
 import spoc.constants as spocConst
 
@@ -91,5 +90,5 @@ class Plugin(pwem.Plugin):
 
         env.addPackage('spoc', version=spocConst.V_CB,
                        commands=spocCB_commands,
-                       tar=VOID_TGZ,
+                       tar='void.tgz',
                        default=True)
