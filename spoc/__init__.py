@@ -31,7 +31,7 @@ import pyworkflow.utils as pwutils
 
 import spoc.constants as spocConst
 
-__version__ = "1.0.0"
+__version__ = "1.0.1"
 _logo = "spoc_logo.png"
 _references = ['Beckers2019']
 _url = "https://github.com/scipion-em/scipion-em-spoc"
