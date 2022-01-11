@@ -121,6 +121,8 @@ class ProtFscFdrControl(ProtAnalysis3D):
         data = np.loadtxt(self._getExtraPath('FSC.txt'))
         _fsc.setData(data[0].tolist(), data[1].tolist())
         self._defineOutputs(outputFSC=_fsc)
+        self._defineSourceRelation(self.halfOne, _fsc)
+        self._defineSourceRelation(self.halfTwo, _fsc)
 
     # --------------------------- INFO functions ------------------------------
     def _methods(self):
