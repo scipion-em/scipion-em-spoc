@@ -96,22 +96,22 @@ class ProtFscFdrControl(ProtAnalysis3D):
                                              self.sym.get().upper())
 
         if self.localRes.get():
-            args += '-localResolutions '
+            args += ' -localResolutions'
 
         if self.lowRes.get() >= 0:
-            args += '-lowRes %f' % self.lowRes.get()
+            args += ' -lowRes %f' % self.lowRes.get()
 
         if self.stepSize.get() >= 0:
-            args += '--window_size %d' % self.stepSize.get()
+            args += ' --window_size %d' % self.stepSize.get()
 
         if self.numAsymUnits.get() >= 0:
-            args += '--numAsymUnits %d' % self.numAsymUnits.get()
+            args += ' --numAsymUnits %d' % self.numAsymUnits.get()
 
         if self.bfactor.get() >= 0:
-            args += '--bFactor %f' % self.bfactor.get()
+            args += ' --bFactor %f' % self.bfactor.get()
 
         if self.mask.get():
-            args += '--mask %s' % abspath(self.mask.get().getFileName())
+            args += ' --mask %s' % abspath(self.mask.get().getFileName())
 
         program = spoc.Plugin.getProgram("FSC_FDRcontrol.py")
         self.runJob(program, args, cwd=self._getExtraPath())
