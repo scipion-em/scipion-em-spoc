@@ -28,7 +28,7 @@ from os.path import abspath
 import numpy as np
 
 from pwem.emlib.image import ImageHandler
-from pwem.objects import FSC
+from pwem.objects import FSC, Volume
 from pwem.protocols import ProtAnalysis3D
 
 from pyworkflow.protocol import PointerParam, BooleanParam, FloatParam, IntParam, StringParam
@@ -48,10 +48,15 @@ class ProtFscFdrControl(ProtAnalysis3D):
     # --------------------------- DEFINE param functions ------------------------
     def _defineParams(self, form):
         form.addSection(label='Input')
+        form.addParam('halfWhere', BooleanParam,
+                      label='Are the half maps stored with the input volume?',
+                      default=False)
         form.addParam('halfOne', PointerParam, pointerClass="Volume",
-                      label='First half map', important=True)
+                      label='First half map', important=True, condition="halfWhere==False")
         form.addParam('halfTwo', PointerParam, pointerClass="Volume",
-                      label='Second half map', important=True)
+                      label='Second half map', important=True, condition="halfWhere==False")
+        form.addParam('inputVol', PointerParam, pointerClass="Volume",
+                      label='Volume with half maps', important=True, condition="halfWhere==True")
         form.addParam('localRes', BooleanParam, default=False, label='Compute local resolution?')
         form.addParam('lowRes', FloatParam, default=-1,
                       label='Set lowest resolution', help='If set to -1, this parameter will not be used')
@@ -81,8 +86,11 @@ class ProtFscFdrControl(ProtAnalysis3D):
     # --------------------------- STEPS functions -------------------------------
     def convertInputStep(self):
         ih = ImageHandler()
-        file_halfOne = self.halfOne.get().getFileName()
-        file_halfTwo = self.halfTwo.get().getFileName()
+        if self.halfWhere.get():
+            file_halfOne, file_halfTwo = self.inputVol.get().getHalfMaps().split(",")
+        else:
+            file_halfOne = self.halfOne.get().getFileName()
+            file_halfTwo = self.halfTwo.get().getFileName()
         if pwutils.getExt(file_halfOne) == '.mrc':
             file_halfOne += ':mrc'
         if pwutils.getExt(file_halfTwo) == '.mrc':
@@ -92,8 +100,12 @@ class ProtFscFdrControl(ProtAnalysis3D):
 
     def computeControlStep(self):
         args = '--halfmap1 halfone.mrc --halfmap2 halftwo.mrc' \
-               ' --apix %f --symmetry %s' % (self.halfOne.get().getSamplingRate(),
-                                             self.sym.get().upper())
+               ' --symmetry %s' % self.sym.get().upper()
+
+        if self.halfWhere.get():
+            args += " --apix %f " % self.inputVol.get().getSamplingRate()
+        else:
+            args += " --apix %f " % self.halfOne.get().getSamplingRate()
 
         if self.localRes.get():
             args += ' -localResolutions'
@@ -117,12 +129,28 @@ class ProtFscFdrControl(ProtAnalysis3D):
         self.runJob(program, args, cwd=self._getExtraPath())
 
     def createOutputStep(self):
-        _fsc = FSC(objLabel='FSC')
-        data = np.loadtxt(self._getExtraPath('FSC.txt'))
-        _fsc.setData(data[0].tolist(), data[1].tolist())
-        self._defineOutputs(outputFSC=_fsc)
-        self._defineSourceRelation(self.halfOne, _fsc)
-        self._defineSourceRelation(self.halfTwo, _fsc)
+        if self.localRes.get():
+            _volume = Volume()
+            _volume.setFileName(self._getExtraPath("halfone_localResolutions.mrc"))
+            if self.halfWhere.get():
+                _volume.setSamplingRate(self.inputVol.get().getSamplingRate())
+                self._defineOutputs(outputLocalResMap=_volume)
+                self._defineSourceRelation(self.inputVol, _volume)
+            else:
+                _volume.setSamplingRate(self.halfOne.get().getSamplingRate())
+                self._defineOutputs(outputLocalResMap=_volume)
+                self._defineSourceRelation(self.halfOne, _volume)
+                self._defineSourceRelation(self.halfTwo, _volume)
+        else:
+            _fsc = FSC(objLabel='FSC')
+            data = np.loadtxt(self._getExtraPath('FSC.txt'))
+            _fsc.setData(data[0].tolist(), data[1].tolist())
+            self._defineOutputs(outputFSC=_fsc)
+            if self.halfWhere.get():
+                self._defineSourceRelation(self.inputVol, _fsc)
+            else:
+                self._defineSourceRelation(self.halfOne, _fsc)
+                self._defineSourceRelation(self.halfTwo, _fsc)
 
     # --------------------------- INFO functions ------------------------------
     def _methods(self):
