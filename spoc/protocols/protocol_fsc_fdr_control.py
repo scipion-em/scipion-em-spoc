@@ -23,7 +23,7 @@
 # *  e-mail address 'scipion@cnb.csic.es'
 # *
 # **************************************************************************
-
+import os.path
 from os.path import abspath
 import numpy as np
 
@@ -95,12 +95,14 @@ class ProtFscFdrControl(ProtAnalysis3D):
             file_halfOne += ':mrc'
         if pwutils.getExt(file_halfTwo) == '.mrc':
             file_halfTwo += ':mrc'
-        ih.convert(file_halfOne, self._getExtraPath('halfone.mrc'))
-        ih.convert(file_halfTwo, self._getExtraPath('halftwo.mrc'))
+        ih.convert(file_halfOne, self._getTmpPath('halfone.mrc'))
+        ih.convert(file_halfTwo, self._getTmpPath('halftwo.mrc'))
 
     def computeControlStep(self):
-        args = '--halfmap1 halfone.mrc --halfmap2 halftwo.mrc' \
-               ' --symmetry %s' % self.sym.get().upper()
+        path_half_one = os.path.abspath(self._getTmpPath('halfone.mrc'))
+        path_half_two = os.path.abspath(self._getTmpPath('halftwo.mrc'))
+        args = '--halfmap1 %s --halfmap2 %s' \
+               ' --symmetry %s' % (path_half_one, path_half_two, self.sym.get().upper())
 
         if self.halfWhere.get():
             args += " --apix %f " % self.inputVol.get().getSamplingRate()
@@ -142,6 +144,11 @@ class ProtFscFdrControl(ProtAnalysis3D):
                 self._defineSourceRelation(self.halfOne, _volume)
                 self._defineSourceRelation(self.halfTwo, _volume)
         else:
+            # Remove unused files
+            pwutils.cleanPath(self._getExtraPath('FSC.pdf'))
+            pwutils.cleanPath(self._getExtraPath('GuinierPlot.pdf'))
+            pwutils.cleanPath(self._getExtraPath('postProcessed.mrc'))
+
             _fsc = FSC(objLabel='FSC')
             data = np.loadtxt(self._getExtraPath('FSC.txt'))
             _fsc.setData(data[0].tolist(), data[1].tolist())
@@ -164,10 +171,13 @@ class ProtFscFdrControl(ProtAnalysis3D):
             summary.append("FDR-FSC information not ready yet.")
 
         if self.getOutputsSize() >= 1:
-            stdout = self._getLogsPath('run.stdout')
-            with open(stdout) as file:
-                for num, line in enumerate(file, 1):
-                    if 'Resolution at 1 % FDR-FSC' in line:
-                        res = [float(s) for s in line.split() if s.replace(".", "", 1).isdigit()][1]
-            summary.append('Resolution at 1 %% FDR-FSC: %.2f Angstrom' % res)
+            if self.localRes.get():
+                summary.append("Local resolution computed from the half maps")
+            else:
+                stdout = self._getLogsPath('run.stdout')
+                with open(stdout) as file:
+                    for num, line in enumerate(file, 1):
+                        if 'Resolution at 1 % FDR-FSC' in line:
+                            res = [float(s) for s in line.split() if s.replace(".", "", 1).isdigit()][1]
+                summary.append('Resolution at 1 %% FDR-FSC: %.2f Angstrom' % res)
         return summary
