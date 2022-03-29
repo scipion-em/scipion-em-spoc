@@ -24,4 +24,5 @@
 # *
 # **************************************************************************
 
-from .protocol_fsc_fdr_control import ProtFscFdrControl
+from .protocol_fsc_fdr_control import ProtResolutionAnalysisFSCFDR
+from .protocol_confidence_map import ProtConfidenceMap

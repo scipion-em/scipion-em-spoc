@@ -29,7 +29,7 @@ from pwem.protocols import ProtImportVolumes
 
 from pyworkflow.tests import BaseTest, setupTestProject, DataSet
 
-from spoc.protocols import ProtFscFdrControl
+from spoc.protocols import ProtResolutionAnalysisFSCFDR
 
 
 class TestFscFdrControl(BaseTest):
@@ -49,7 +49,7 @@ class TestFscFdrControl(BaseTest):
         return protImport.outputVolume
 
     def runFscFdrControl(self, halfOne, halfTwo):
-        prot = self.newProtocol(ProtFscFdrControl, halfOne=halfOne, halfTwo=halfTwo)
+        prot = self.newProtocol(ProtResolutionAnalysisFSCFDR, halfOne=halfOne, halfTwo=halfTwo)
         self.launchProtocol(prot)
         self.assertIsNotNone(prot.outputFSC,
                              "There was a problem with FSC-FdR protocol output")

@@ -1,6 +1,7 @@
+# -*- coding: utf-8 -*-
 # **************************************************************************
 # *
-# * Authors:  David Herreros Calero (dherreros@cnb.csic.es)
+# * Authors:     J.L. Vilas (jlvilas@cnb.csic.es)
 # *
 # * Unidad de  Bioinformatica of Centro Nacional de Biotecnologia , CSIC
 # *
@@ -23,92 +24,99 @@
 # *  e-mail address 'scipion@cnb.csic.es'
 # *
 # **************************************************************************
+import os
 
-
-from os.path import abspath
-
-from pyworkflow.viewer import DESKTOP_TKINTER, WEB_DJANGO, ProtocolViewer
-import pyworkflow.protocol.params as params
-from pwem.wizards import ColorScaleWizardBase
-from pwem.constants import COLOR_OTHER, AX_Z
-from pyworkflow.protocol.params import (LabelParam, EnumParam, PointerParam,
-                                        IntParam, LEVEL_ADVANCED)
-from pwem.viewers import ChimeraView, FscViewer
-from pwem.emlib.image import ImageHandler
 import matplotlib.pyplot as plt
 from matplotlib import cm
+from pwem.constants import COLOR_OTHER, AX_Z
+from pwem.wizards import ColorScaleWizardBase
+from pyworkflow.utils import replaceExt
+from os.path import exists
+
+from pyworkflow.protocol.params import (LabelParam, EnumParam, PointerParam,
+                                        IntParam, LEVEL_ADVANCED)
+from pyworkflow.viewer import ProtocolViewer, DESKTOP_TKINTER
+
 from pwem.viewers import (LocalResolutionViewer, EmPlotter, ChimeraView,
                           DataView)
+from pwem.emlib.metadata import MetaData, MDL_X, MDL_COUNT
 
-from spoc.protocols.protocol_fsc_fdr_control import ProtResolutionAnalysisFSCFDR
+import pyworkflow.utils as pwutils
+from pwem.emlib.image import ImageHandler
 
-class ViewerFscFdrControl(LocalResolutionViewer):
-    """ Visualize local resolution """
-    _label = 'viewer local resolution'
-    _targets = [ProtResolutionAnalysisFSCFDR]
-    _environments = [DESKTOP_TKINTER, WEB_DJANGO]
-    OPEN_FILE = "open %s\n"
-    VOXEL_SIZE = "volume #%d voxelSize %s\n"
-    VOL_HIDE = "vol #%d hide\n"
-    VIEW = "view\n"
+from spoc.protocols.protocol_confidence_map import (ProtConfidenceMap, OUTPUT_MAP, INPUT_MAP)
+from pyworkflow.gui import plotter
+
+
+class XmippConfidenceMapViewer(LocalResolutionViewer):
+    """Visualization tools for confidence maps results. """
+
+    _environments = [DESKTOP_TKINTER]
+    _targets = [ProtConfidenceMap]
+    _label = 'viewer'
+
+    @staticmethod
+    def getColorMapChoices():
+        return plt.colormaps()
+
+    def __init__(self, *args, **kwargs):
+        ProtocolViewer.__init__(self, **kwargs)
 
     def _defineParams(self, form):
-        form.addSection(label='Show results')
-        #if hasattr(self.protocol, "outputFSC"):
-        form.addParam('doShowFSC', params.LabelParam,
-                          label="Display the FSC curve")
+        form.addSection(label='Visualization')
 
-        if (self.protocol.localRes.get()):
-            form.addParam('doShowLocalRes', params.LabelParam,
-                          label="Display the local resolution")
+        form.addParam('doShowConfidenceMapSlices', LabelParam,
+                      label="Show confidence map slices")
 
-            group = form.addGroup('Colored resolution Slices and Volumes')
+        form.addParam('doShowOriginalVolumeSlices', LabelParam,
+                      label="Show original volume slices")
 
-            group.addParam('sliceAxis', EnumParam, default=AX_Z,
-                           choices=['x', 'y', 'z'],
-                           display=EnumParam.DISPLAY_HLIST,
-                           label='Slice axis')
+        form.addParam('doShowResHistogram', LabelParam,
+                      label="Show confidence map histogram")
 
-            group.addParam('doShowVolumeColorSlices', LabelParam,
-                           label="Show colored slices")
+        group = form.addGroup('Colored resolution Slices and Volumes')
+        group.addParam('sliceAxis', EnumParam, default=AX_Z,
+                       choices=['x', 'y', 'z'],
+                       display=EnumParam.DISPLAY_HLIST,
+                       label='Slice axis')
 
-            group.addParam('doShowOneColorslice', LabelParam,
-                           expertLevel=LEVEL_ADVANCED,
-                           label='Show selected slice')
+        group.addParam('doShowVolumeColorSlices', LabelParam,
+                       label="Show colored slices")
 
-            group.addParam('sliceNumber', IntParam, default=-1,
-                           expertLevel=LEVEL_ADVANCED,
-                           label='Show slice number')
+        group.addParam('doShowOneColorslice', LabelParam,
+                       expertLevel=LEVEL_ADVANCED,
+                       label='Show selected slice')
+        group.addParam('sliceNumber', IntParam, default=-1,
+                       expertLevel=LEVEL_ADVANCED,
+                       label='Show slice number')
 
-            group.addParam('doShowChimera', LabelParam,
-                           label="Show Resolution map in ChimeraX")
+        group.addParam('doShowChimera', LabelParam,
+                       label="Show Resolution map in Chimera")
 
-            ColorScaleWizardBase.defineColorScaleParams(group, defaultLowest=10, defaultHighest=1)
+        ColorScaleWizardBase.defineColorScaleParams(group, defaultLowest=0, defaultHighest=1)
+
+    def getOutputFileName(self, inputMap, outputMap):
+        fnbase = pwutils.removeBaseExt(inputMap)
+        return self._getExtraPath(fnbase + outputMap)
+
 
     def getImgData(self, imgFile):
         return LocalResolutionViewer.getImgData(self, imgFile)
 
-    def merge_two_dicts(self, d1, d2):
-        z = d1.copy()  # start with keys and values of x
-        z.update(d2)  # modifies z with keys and values of y
-        return z
-
     def _getVisualizeDict(self):
-        d1 = {'doShowFSC': self._doShowFSC}
-        d2= {}
-        if self.protocol.localRes.get():
-            d2 = {'doShowFSC': self._doShowFSC,
-                'doShowLocalRes': self._doShowLocalRes,
+        return {
+                'doShowConfidenceMapSlices': self._showConfidenceMapSlices,
+                'doShowOriginalVolumeSlices': self._showOriginalVolumeSlices,
                 'doShowVolumeColorSlices': self._showVolumeColorSlices,
                 'doShowOneColorslice': self._showOneColorslice,
-                'doShowChimera': self._showChimera()
-                }
-        return self.merge_two_dicts(d1, d2)
+                'doShowResHistogram': self._plotHistogram,
+                'doShowChimera': self._showChimera
+            }
 
-
-    def _doShowLocalRes(self, param=None):
-        cm = DataView(self.protocol.outputLocalResMap.getFileName())
-        return [cm]
+    def _showConfidenceMapSlices(self, param=None):
+        cm = DataView(self.protocol.confidenceMap.getFileName())
+        cm2 = DataView(self.protocol.confidenceMap_log10FDR.getFileName())
+        return [cm, cm2]
 
 
     def _showOriginalVolumeSlices(self, param=None):
@@ -117,7 +125,7 @@ class ViewerFscFdrControl(LocalResolutionViewer):
 
 
     def _showVolumeColorSlices(self, param=None):
-        imageFile = self.protocol.outputLocalResMap.getFileName()
+        imageFile = self.protocol.confidenceMap.getFileName()
         imgData, _, _, _ = self.getImgData(imageFile)
 
         xplotter = EmPlotter(x=2, y=2, mainTitle="Confidence Map Slices "
@@ -140,7 +148,7 @@ class ViewerFscFdrControl(LocalResolutionViewer):
         return max(data) - 1
 
     def _showOneColorslice(self, param=None):
-        imageFile = self.protocol.outputLocalResMap.getFileName()
+        imageFile = self.protocol.confidenceMap.getFileName()
         imgData, _, _, volDims = self.getImgData(imageFile)
         xplotter = EmPlotter(x=1, y=1, mainTitle="Confidence map Slices "
                                                     "along %s-axis."
@@ -160,7 +168,7 @@ class ViewerFscFdrControl(LocalResolutionViewer):
         return [xplotter]
 
     def _plotHistogram(self, param=None):
-        imageFile = self.protocol.outputLocalResMap.getFileName()
+        imageFile = self.protocol.confidenceMap.getFileName()
         img = ImageHandler().read(imageFile)
         imgData = img.getData()
         imgList = imgData.flatten()
@@ -176,9 +184,11 @@ class ViewerFscFdrControl(LocalResolutionViewer):
     def _getAxis(self):
         return self.getEnumText('sliceAxis')
 
+
     def _showChimera(self, param=None):
-        fnResVol = self.protocol.outputLocalResMap.getFileName()
-        vol = self.protocol.halfOne.get()
+
+        fnResVol = self.protocol.confidenceMap.getFileName()
+        vol = self.protocol.inputMap.get()
 
         fnOrigMap = vol.getFileName()
         sampRate = vol.getSamplingRate()
@@ -196,43 +206,3 @@ class ViewerFscFdrControl(LocalResolutionViewer):
         if cmap is None:
             cmap = cm.jet
         return cmap
-
-
-
-
-    '''
-    def _doShowLocalRes(self, param=None):
-        scriptFile = self.protocol._getPath('localres_chimera.cxc')
-        fhCmd = open(scriptFile, 'w')
-        if self.protocol.halfWhere.get():
-            fnVol = abspath(self.protocol.inputVol.get().getFileName())
-            smprt = self.protocol.inputVol.get().getSamplingRate()
-        else:
-            fnVol = abspath(self.protocol._getExtraPath('halfone.mrc'))
-            smprt = self.protocol.halfOne.get().getSamplingRate()
-        fnResMap = abspath(self.protocol._getExtraPath("halfone_localResolutions.mrc"))
-
-        fhCmd.write(self.OPEN_FILE % fnVol)
-        fhCmd.write(self.OPEN_FILE % fnResMap)
-        counter = 1
-        fhCmd.write(self.VOXEL_SIZE % (counter, str(smprt)))
-        counter += 1
-        fhCmd.write(self.VOXEL_SIZE % (counter, str(smprt)))
-        fhCmd.write(self.VOL_HIDE % counter)
-        fhCmd.write('color sample #%d map #%d palette rainbow\n' % (counter - 1, counter))
-        fhCmd.write(self.VIEW)
-        fhCmd.close()
-
-        view = ChimeraView(scriptFile)
-        return [view]
-    '''
-
-    def _doShowFSC(self, param=None):
-        fscViewer = FscViewer(project=self.protocol.getProject(),
-                              threshold=0.143,
-                              protocol=self.protocol,
-                              figure=None,
-                              addButton=True)
-        fscViewer.visualize(self.protocol.outputFSC)
-        return [fscViewer]
-
