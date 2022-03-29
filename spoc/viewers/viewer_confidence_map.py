@@ -28,6 +28,7 @@ import os
 
 import matplotlib.pyplot as plt
 from matplotlib import cm
+from pwem import splitRange
 from pwem.constants import COLOR_OTHER, AX_Z
 from pwem.wizards import ColorScaleWizardBase
 from pyworkflow.utils import replaceExt
@@ -43,6 +44,8 @@ from pwem.emlib.metadata import MetaData, MDL_X, MDL_COUNT
 
 import pyworkflow.utils as pwutils
 from pwem.emlib.image import ImageHandler
+
+import chimera
 
 from spoc.protocols.protocol_confidence_map import (ProtConfidenceMap, OUTPUT_MAP, INPUT_MAP)
 from pyworkflow.gui import plotter
@@ -92,6 +95,12 @@ class XmippConfidenceMapViewer(LocalResolutionViewer):
 
         group.addParam('doShowChimera', LabelParam,
                        label="Show Resolution map in Chimera")
+        group.addParam('structure', PointerParam, pointerClass='AtomStruct',
+                       allowsNull=True,
+                       label="Structure to be colored",
+                       help='Structure to be colored based on the confidence map. This parameter is '
+                            'optional. If left empty, the previously provided input volume will be '
+                            'colored instead.')
 
         ColorScaleWizardBase.defineColorScaleParams(group, defaultLowest=0, defaultHighest=1)
 
@@ -99,38 +108,35 @@ class XmippConfidenceMapViewer(LocalResolutionViewer):
         fnbase = pwutils.removeBaseExt(inputMap)
         return self._getExtraPath(fnbase + outputMap)
 
-
     def getImgData(self, imgFile):
         return LocalResolutionViewer.getImgData(self, imgFile)
 
     def _getVisualizeDict(self):
         return {
-                'doShowConfidenceMapSlices': self._showConfidenceMapSlices,
-                'doShowOriginalVolumeSlices': self._showOriginalVolumeSlices,
-                'doShowVolumeColorSlices': self._showVolumeColorSlices,
-                'doShowOneColorslice': self._showOneColorslice,
-                'doShowResHistogram': self._plotHistogram,
-                'doShowChimera': self._showChimera
-            }
+            'doShowConfidenceMapSlices': self._showConfidenceMapSlices,
+            'doShowOriginalVolumeSlices': self._showOriginalVolumeSlices,
+            'doShowVolumeColorSlices': self._showVolumeColorSlices,
+            'doShowOneColorslice': self._showOneColorslice,
+            'doShowResHistogram': self._plotHistogram,
+            'doShowChimera': self._showChimera
+        }
 
     def _showConfidenceMapSlices(self, param=None):
         cm = DataView(self.protocol.confidenceMap.getFileName())
         cm2 = DataView(self.protocol.confidenceMap_log10FDR.getFileName())
         return [cm, cm2]
 
-
     def _showOriginalVolumeSlices(self, param=None):
         cm = DataView(self.protocol.inputMap.get().getFileName())
         return [cm]
-
 
     def _showVolumeColorSlices(self, param=None):
         imageFile = self.protocol.confidenceMap.getFileName()
         imgData, _, _, _ = self.getImgData(imageFile)
 
         xplotter = EmPlotter(x=2, y=2, mainTitle="Confidence Map Slices "
-                                                    "along %s-axis."
-                                                    % self._getAxis())
+                                                 "along %s-axis."
+                                                 % self._getAxis())
         # The slices to be shown are close to the center. Volume size is divided
         # in segments, the fourth central ones are selected i.e. 3,4,5,6
         for i in list(range(3, 7)):
@@ -151,8 +157,8 @@ class XmippConfidenceMapViewer(LocalResolutionViewer):
         imageFile = self.protocol.confidenceMap.getFileName()
         imgData, _, _, volDims = self.getImgData(imageFile)
         xplotter = EmPlotter(x=1, y=1, mainTitle="Confidence map Slices "
-                                                    "along %s-axis."
-                                                    % self._getAxis())
+                                                 "along %s-axis."
+                                                 % self._getAxis())
         sliceNumber = self.sliceNumber.get()
         if sliceNumber < 0:
             sliceNumber = volDims[0] / 2
@@ -172,10 +178,10 @@ class XmippConfidenceMapViewer(LocalResolutionViewer):
         img = ImageHandler().read(imageFile)
         imgData = img.getData()
         imgList = imgData.flatten()
-        #imgDataMax = self.getBackGroundValue(imgList)
-        imgListNoZero = imgList#filter(lambda x: 0 < x < imgDataMax, imgList)
+        # imgDataMax = self.getBackGroundValue(imgList)
+        imgListNoZero = imgList  # filter(lambda x: 0 < x < imgDataMax, imgList)
         nbins = 10
-        plotter = EmPlotter(x=1,y=1,mainTitle="  ")
+        plotter = EmPlotter(x=1, y=1, mainTitle="  ")
         plotter.createSubPlot("Resolution histogram",
                               "Resolution (A)", "# of Counts")
         plotter.plotHist(imgListNoZero, nbins)
@@ -184,22 +190,65 @@ class XmippConfidenceMapViewer(LocalResolutionViewer):
     def _getAxis(self):
         return self.getEnumText('sliceAxis')
 
-
     def _showChimera(self, param=None):
+        views = []
+        errors = []
 
         fnResVol = self.protocol.confidenceMap.getFileName()
         vol = self.protocol.inputMap.get()
 
         fnOrigMap = vol.getFileName()
         sampRate = vol.getSamplingRate()
+        OPEN_FILE = "open %s\n"
 
-        cmdFile = self.protocol._getExtraPath('chimera_resolution_map.py')
-        self.createChimeraScript(cmdFile, fnResVol, fnOrigMap, sampRate,
-                                 numColors=self.intervals.get(),
-                                 lowResLimit=self.highest.get(),
-                                 highResLimit=self.lowest.get())
-        view = ChimeraView(cmdFile)
-        return [view]
+        if self.structure.get() and '1.3' in chimera.Plugin.getHome():
+
+            imageFile = os.path.abspath(fnResVol)
+            _, minRes, maxRes, voldim = self.getImgData(imageFile)
+            # Narrow the color range to the highest resolution range
+            lowResLimit = min(maxRes, minRes + 5)
+            highResLimit = minRes
+            stepColors = splitRange(highResLimit, lowResLimit,
+                                    splitNum=13)
+            colorList = plotter.getHexColorList(len(stepColors), self._getColorName())
+            colorStr = 'key{} fontSize 15 size 0.025,0.4 pos 0.01,0.3\n'
+            keyStr = ''
+            stepColors.reverse(), colorList.reverse()
+            for step, color in zip(stepColors, colorList):
+                keyStr += ' {}:{}'.format(color, step)
+            colorStr = colorStr.format(keyStr)
+
+            scriptFile = self.protocol._getExtraPath('show_confidence_map.cxc')
+            fhCmd = open(scriptFile, 'w')
+
+            fhCmd.write(OPEN_FILE % imageFile)
+            fhCmd.write("volume #1 voxelSize %f\n" % sampRate)
+            fhCmd.write("hide #1\n")
+            fhCmd.write(OPEN_FILE % os.path.abspath(self.structure.get().getFileName()))
+            # fhCmd.write("start Model Panel\n")
+            fhCmd.write("show cartoons\n")
+            fhCmd.write("cartoon style width 1.5 thick 1.5\n")
+            fhCmd.write("style stick\n")
+            fhCmd.write("measure mapvalues #1 atoms #2 attribute confidence\n")
+            fhCmd.write("color byattribute confidence\n")
+            fhCmd.write(colorStr)
+            fhCmd.write("view\n")
+            fhCmd.close()
+            views.append(ChimeraView(scriptFile))
+        elif self.structure.get() and '1.3' not in chimera.Plugin.getHome():
+            errors.append('Atomic structure colouring by map values is only supported by ChimeraX-1.3. '
+                          'Please, update the ChimeraX binaries if you would like to colour an atomic '
+                          'structure with the confidence map values.')
+            self.errorList(errors, views)
+        else:
+            scriptFile = self.protocol._getExtraPath('show_confidence_map.py')
+            self.createChimeraScript(scriptFile, fnResVol, fnOrigMap, sampRate,
+                                     numColors=self.intervals.get(),
+                                     lowResLimit=self.highest.get(),
+                                     highResLimit=self.lowest.get())
+            views.append(ChimeraView(scriptFile))
+
+        return views
 
     def getColorMap(self):
         cmap = cm.get_cmap(self.colorMap.get())
