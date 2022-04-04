@@ -29,7 +29,7 @@ from pwem.protocols import ProtImportVolumes
 
 from pyworkflow.tests import BaseTest, setupTestProject, DataSet
 
-from spoc.protocols import ProtFscFdrControl
+from spoc.protocols import ProtResolutionAnalysisFSCFDR, ProtConfidenceMap
 
 
 class TestFscFdrControl(BaseTest):
@@ -40,6 +40,8 @@ class TestFscFdrControl(BaseTest):
         setupTestProject(cls)
         cls.dataset = DataSet.getDataSet('relion_tutorial')
         cls.volume = cls.dataset.getFile('volumes/reference_masked.vol')
+        cls.halfOne = cls.runImportVolumes(cls, cls.volume, 1, 'Halfmap One')
+        cls.halfTwo = cls.runImportVolumes(cls, cls.volume, 1, 'Halfmap One')
 
     def runImportVolumes(cls, pattern, samplingRate, label):
         """ Run an Import particles protocol. """
@@ -48,21 +50,43 @@ class TestFscFdrControl(BaseTest):
         cls.launchProtocol(protImport)
         return protImport.outputVolume
 
-    def runFscFdrControl(self, halfOne, halfTwo):
-        prot = self.newProtocol(ProtFscFdrControl, halfOne=halfOne, halfTwo=halfTwo)
+    def runFscFdrControl(self, halfOne, halfTwo, localRes, label):
+        prot = self.newProtocol(ProtResolutionAnalysisFSCFDR, halfOne=halfOne, halfTwo=halfTwo,
+                                localRes=localRes, objLabel=label)
         self.launchProtocol(prot)
-        self.assertIsNotNone(prot.outputFSC,
-                             "There was a problem with FSC-FdR protocol output")
+        if localRes:
+            self.assertIsNotNone(prot.outputLocalResMap,
+                                 "There was a problem with FSC-FdR protocol output (Local resolution)")
+        else:
+            self.assertIsNotNone(prot.outputFSC,
+                                 "There was a problem with FSC-FdR protocol output (Global FSC)")
         return prot
 
-    def test_fsc_fdr_control(self):
-        halfOne = self.runImportVolumes(self.volume, 1, 'Halfmap One')
-        halfTwo = self.runImportVolumes(self.volume, 1, 'Halfmap Two')
-        prot = self.runFscFdrControl(halfOne, halfTwo)
+    def runConfidenceMap(self, map, label):
+        prot = self.newProtocol(ProtConfidenceMap, inputMap=map, locResFilter=False, objLabel=label)
+        self.launchProtocol(prot)
+        self.assertIsNotNone(prot.confidenceMap,
+                             "There was a problem with Confidence Map protocol output")
+        self.assertIsNotNone(prot.confidenceMap_log10FDR,
+                             "There was a problem with Confidence Map protocol output")
+        return prot
+
+    def test_fsc_fdr_control_fsc(self):
+        prot = self.runFscFdrControl(self.halfOne, self.halfTwo, False, 'Global FSC')
         stdout = prot._getLogsPath('run.stdout')
         with open(stdout) as file:
             for num, line in enumerate(file, 1):
                 if 'Resolution at 1 % FDR-FSC' in line:
                     res = [float(s) for s in line.split() if s.replace(".", "", 1).isdigit()][1]
         self.assertEqual(res, 2.0, msg="Unexpected resolution value")
+        return prot
+
+    def test_fsc_fdr_control_locres(self):
+        # TODO: Add extra checks (probably comparing to an already saved result?)
+        prot = self.runFscFdrControl(self.halfOne, self.halfTwo, True, 'Local resolution')
+        return prot
+
+    def test_confidence_map(self):
+        # TODO: Add extra checks (probably comparing to an already saved result?)
+        prot = self.runConfidenceMap(self.halfOne, 'Confidence map')
         return prot
