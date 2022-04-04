@@ -123,13 +123,14 @@ class ViewerFscFdrControl(LocalResolutionViewer):
         xplotter = EmPlotter(x=2, y=2, mainTitle="Confidence Map Slices "
                                                     "along %s-axis."
                                                     % self._getAxis())
+
         # The slices to be shown are close to the center. Volume size is divided
         # in segments, the fourth central ones are selected i.e. 3,4,5,6
         for i in list(range(3, 7)):
             sliceNumber = self.getSlice(i, imgData)
             a = xplotter.createSubPlot("Slice %s" % (sliceNumber + 1), '', '')
             matrix = self.getSliceImage(imgData, sliceNumber, self._getAxis())
-            plot = xplotter.plotMatrix(a, matrix, self.lowest.get(), self.highest.get(),
+            plot = xplotter.plotMatrix(a, matrix, self.highest.get(), self.lowest.get(),
                                        cmap=self.getColorMap(),
                                        interpolation="nearest")
         xplotter.getColorBar(plot)
