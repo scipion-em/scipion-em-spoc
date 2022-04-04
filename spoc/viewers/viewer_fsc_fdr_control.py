@@ -83,6 +83,15 @@ class ViewerFscFdrControl(LocalResolutionViewer):
             group.addParam('doShowChimera', LabelParam,
                            label="Show Resolution map in ChimeraX")
 
+            group.addParam('sharpenedMap', PointerParam, pointerClass='Volume',
+                           label="(Optional) Color a sharpen map by local resolution in ChimeraX",
+                           allowsNull=True,
+                           help='Local resolution should be estimated with the raw maps instead'
+                                ' of sharpen maps. Information about this in (Vilas et al '
+                                'Current Opinion in Structural Biology 2021). This entry parameter '
+                                'allows to color the local resolution in'
+                                'a different map')
+
             ColorScaleWizardBase.defineColorScaleParams(group, defaultLowest=10, defaultHighest=1)
 
     def getImgData(self, imgFile):
@@ -101,7 +110,7 @@ class ViewerFscFdrControl(LocalResolutionViewer):
                 'doShowLocalRes': self._doShowLocalRes,
                 'doShowVolumeColorSlices': self._showVolumeColorSlices,
                 'doShowOneColorslice': self._showOneColorslice,
-                'doShowChimera': self._showChimera()
+                'doShowChimera': self._showChimera
                 }
         return self.merge_two_dicts(d1, d2)
 
@@ -165,8 +174,8 @@ class ViewerFscFdrControl(LocalResolutionViewer):
         img = ImageHandler().read(imageFile)
         imgData = img.getData()
         imgList = imgData.flatten()
-        #imgDataMax = self.getBackGroundValue(imgList)
-        imgListNoZero = imgList#filter(lambda x: 0 < x < imgDataMax, imgList)
+
+        imgListNoZero = imgList
         nbins = 10
         plotter = EmPlotter(x=1,y=1,mainTitle="  ")
         plotter.createSubPlot("Resolution histogram",
@@ -177,56 +186,70 @@ class ViewerFscFdrControl(LocalResolutionViewer):
     def _getAxis(self):
         return self.getEnumText('sliceAxis')
 
-    def _showChimera(self, param=None):
-        fnResVol = self.protocol.outputLocalResMap.getFileName()
-        vol = self.protocol.halfOne.get()
-
-        fnOrigMap = vol.getFileName()
-        sampRate = vol.getSamplingRate()
-
-        cmdFile = self.protocol._getExtraPath('chimera_resolution_map.py')
-        self.createChimeraScript(cmdFile, fnResVol, fnOrigMap, sampRate,
-                                 numColors=self.intervals.get(),
-                                 lowResLimit=self.highest.get(),
-                                 highResLimit=self.lowest.get())
-        view = ChimeraView(cmdFile)
-        return [view]
-
     def getColorMap(self):
         cmap = cm.get_cmap(self.colorMap.get())
         if cmap is None:
             cmap = cm.jet
         return cmap
 
+    def _showChimera(self, param=None):
+        views = []
+        errors = []
 
+        fnResVol = self.protocol.outputLocalResMap.getFileName()
 
-
-    '''
-    def _doShowLocalRes(self, param=None):
-        scriptFile = self.protocol._getPath('localres_chimera.cxc')
-        fhCmd = open(scriptFile, 'w')
         if self.protocol.halfWhere.get():
-            fnVol = abspath(self.protocol.inputVol.get().getFileName())
-            smprt = self.protocol.inputVol.get().getSamplingRate()
+            fnOrigMap = abspath(self.protocol.inputVol.get().getFileName())
+            sampRate = self.protocol.inputVol.get().getSamplingRate()
         else:
-            fnVol = abspath(self.protocol._getExtraPath('halfone.mrc'))
-            smprt = self.protocol.halfOne.get().getSamplingRate()
-        fnResMap = abspath(self.protocol._getExtraPath("halfone_localResolutions.mrc"))
+            fnOrigMap = abspath(self.protocol.halfOne.get().getFileName())
+            sampRate = self.protocol.halfOne.get().getSamplingRate()
+        OPEN_FILE = "open %s\n"
 
-        fhCmd.write(self.OPEN_FILE % fnVol)
-        fhCmd.write(self.OPEN_FILE % fnResMap)
-        counter = 1
-        fhCmd.write(self.VOXEL_SIZE % (counter, str(smprt)))
-        counter += 1
-        fhCmd.write(self.VOXEL_SIZE % (counter, str(smprt)))
-        fhCmd.write(self.VOL_HIDE % counter)
-        fhCmd.write('color sample #%d map #%d palette rainbow\n' % (counter - 1, counter))
-        fhCmd.write(self.VIEW)
-        fhCmd.close()
+        if self.sharpenedMap.get():
 
-        view = ChimeraView(scriptFile)
-        return [view]
-    '''
+            imageFile = os.path.abspath(fnResVol)
+            _, minRes, maxRes, voldim = self.getImgData(imageFile)
+            # Narrow the color range to the highest resolution range
+            lowResLimit = min(maxRes, minRes + 5)
+            highResLimit = minRes
+            stepColors = splitRange(highResLimit, lowResLimit,
+                                    splitNum=13)
+            colorList = plotter.getHexColorList(len(stepColors), self._getColorName())
+            colorStr = 'key{} fontSize 15 size 0.025,0.4 pos 0.01,0.3\n'
+            keyStr = ''
+            stepColors.reverse(), colorList.reverse()
+            for step, color in zip(stepColors, colorList):
+                keyStr += ' {}:{}'.format(color, step)
+            colorStr = colorStr.format(keyStr)
+
+            scriptFile = self.protocol._getExtraPath('show_chimerca.cxc')
+            fhCmd = open(scriptFile, 'w')
+
+            fhCmd.write(OPEN_FILE % imageFile)
+            fhCmd.write("volume #1 voxelSize %f\n" % sampRate)
+            fhCmd.write("hide #1\n")
+            fhCmd.write(OPEN_FILE % os.path.abspath(self.sharpenedMap.get().getFileName()))
+            # fhCmd.write("start Model Panel\n")
+            fhCmd.write("show cartoons\n")
+            fhCmd.write("cartoon style width 1.5 thick 1.5\n")
+            fhCmd.write("style stick\n")
+            fhCmd.write("measure mapvalues #1 atoms #2 attribute confidence\n")
+            fhCmd.write("color byattribute confidence\n")
+            fhCmd.write(colorStr)
+            fhCmd.write("view\n")
+            fhCmd.close()
+            views.append(ChimeraView(scriptFile))
+        else:
+            scriptFile = self.protocol._getExtraPath('show_confidence_map.py')
+            self.createChimeraScript(scriptFile, fnResVol, fnOrigMap, sampRate,
+                                     numColors=self.intervals.get(),
+                                     lowResLimit=self.highest.get(),
+                                     highResLimit=self.lowest.get())
+            views.append(ChimeraView(scriptFile))
+
+        return views
+
 
     def _doShowFSC(self, param=None):
         fscViewer = FscViewer(project=self.protocol.getProject(),
