@@ -58,10 +58,12 @@ class ProtResolutionAnalysisFSCFDR(ProtAnalysis3D):
                       label='Second half map', important=True, condition="halfWhere==False")
         form.addParam('inputVol', PointerParam, pointerClass="Volume",
                       label='Volume with half maps', important=True, condition="halfWhere==True")
-        form.addParam('mask', PointerParam, pointerClass="Volume", allowsNull=True,
-                      label='Mask for local map-model FSC calculation')
+
         form.addParam('localRes', BooleanParam, default=False, label='Estimate local resolution?')
         line = form.addLine('Local Resolution Parameters', condition='localRes')
+        form.addParam('mask', PointerParam, pointerClass="Volume", allowsNull=True,
+                      condition='localRes',
+                      label='Mask for local map-model FSC calculation')
         line.addParam('lowRes', FloatParam, default=-1,
                       condition='localRes',
                       label='Lowest resolution', help='If set to -1, this parameter will not be used')
@@ -126,9 +128,6 @@ class ProtResolutionAnalysisFSCFDR(ProtAnalysis3D):
         program = spoc.Plugin.getProgram("FSC_FDRcontrol.py")
         self.runJob(program, args, cwd=self._getExtraPath())
 
-    def estimateLocalResolution(self):
-        pass
-
     def computeControlStep(self):
 
         args = self.defineCommonArgs()
@@ -137,17 +136,17 @@ class ProtResolutionAnalysisFSCFDR(ProtAnalysis3D):
         if self.localRes.get():
             args += ' -localResolutions'
 
-        if self.lowRes.get() >= 0:
-            args += ' -lowRes %f' % self.lowRes.get()
+            if self.lowRes.get() >= 0:
+                args += ' -lowRes %f' % self.lowRes.get()
 
-        if self.stepSize.get() >= 0:
-            args += ' --window_size %d' % self.stepSize.get()
+            if self.stepSize.get() >= 0:
+                args += ' --window_size %d' % self.stepSize.get()
 
-        if self.numAsymUnits.get() >= 0:
-            args += ' --numAsymUnits %d' % self.numAsymUnits.get()
+            if self.numAsymUnits.get() >= 0:
+                args += ' --numAsymUnits %d' % self.numAsymUnits.get()
 
-        if self.mask.get():
-            args += ' --mask %s' % abspath(self.mask.get().getFileName())
+            if self.mask.get():
+                args += ' --mask %s' % abspath(self.mask.get().getFileName())
 
         program = spoc.Plugin.getProgram("FSC_FDRcontrol.py")
         self.runJob(program, args, cwd=self._getExtraPath())
@@ -165,11 +164,6 @@ class ProtResolutionAnalysisFSCFDR(ProtAnalysis3D):
                 self._defineOutputs(outputLocalResMap=_volume)
                 self._defineSourceRelation(self.halfOne, _volume)
                 self._defineSourceRelation(self.halfTwo, _volume)
-
-            # Remove unused files
-            #pwutils.cleanPath(self._getExtraPath('FSC.pdf'))
-            #pwutils.cleanPath(self._getExtraPath('GuinierPlot.pdf'))
-            #pwutils.cleanPath(self._getExtraPath('postProcessed.mrc'))
 
         _fsc = FSC(objLabel='FSC')
         data = np.loadtxt(self._getExtraPath('FSC.txt'))
