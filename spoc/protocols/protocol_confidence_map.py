@@ -40,6 +40,7 @@ import spoc
 INPUT_MAP = 'inputMap.mrc'
 OUTPUT_MAP = '_confidenceMap.mrc'
 OUTPUT_LOG10 = '_-log10FDR.mrc'
+FILTERED_MAP = '_locFilt.mrc'
 
 class ProtConfidenceMap(ProtAnalysis3D):
     """
@@ -109,6 +110,7 @@ class ProtConfidenceMap(ProtAnalysis3D):
     def computeConfidenceMapStep(self):
         path_inputMap = os.path.abspath(self._getTmpPath(INPUT_MAP))
         args = ' -em %s ' % path_inputMap
+        args += ' -p %f ' % self.inputMap.get().getSamplingRate()
         if self.box.hasValue():
             args +=' -w %i' % self.box.get()
             if self.x_center.hasValue() and self.y_center.hasValue() \
@@ -116,7 +118,7 @@ class ProtConfidenceMap(ProtAnalysis3D):
                 args += ' -noiseBox %i %i %i' % (self.x_center.get(), self.y_center.get(),
                                              self.z_center.get())
         if self.locResFilter:
-            args += ' -locResMap %s ' % self.locResMap.get().getFileName()
+            args += ' -locResMap %s ' % os.path.abspath(self.resMap.get().getFileName())
 
         program = spoc.Plugin.getProgram("FDRcontrol.py")
         self.runJob(program, args, cwd=self._getExtraPath())
@@ -131,12 +133,20 @@ class ProtConfidenceMap(ProtAnalysis3D):
         self._defineSourceRelation(self.inputMap, confMap)
 
         confMaplog = Volume()
-        fnbase = pwutils.removeBaseExt(INPUT_MAP)
         fnbaseout = pwutils.removeBaseExt(OUTPUT_MAP) + OUTPUT_LOG10
         confMaplog.setFileName(self._getExtraPath(fnbase+fnbaseout))
         confMaplog.setSamplingRate(self.inputMap.get().getSamplingRate())
         self._defineOutputs(confidenceMap_log10FDR=confMaplog)
         self._defineSourceRelation(self.inputMap, confMaplog)
+
+        if self.locResFilter:
+            filtMap = Volume()
+            fnbaseout = pwutils.removeBaseExt(OUTPUT_MAP)
+
+            filtMap.setFileName(self._getExtraPath(fnbase + FILTERED_MAP))
+            filtMap.setSamplingRate(self.inputMap.get().getSamplingRate())
+            self._defineOutputs(localfiltMap=filtMap)
+            self._defineSourceRelation(self.inputMap, filtMap)
 
     # --------------------------- INFO functions ------------------------------
     def _methods(self):

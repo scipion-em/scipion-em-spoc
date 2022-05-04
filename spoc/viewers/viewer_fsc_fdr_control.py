@@ -252,6 +252,10 @@ class ViewerFscFdrControl(LocalResolutionViewer):
 
 
     def _doShowFSC(self, param=None):
+        import subprocess
+        file = self.protocol._getExtraPath('FSC.pdf')
+        subprocess.call(["xdg-open", file])
+        #subprocess.Popen([path], shell=True)
         fscViewer = FscViewer(project=self.protocol.getProject(),
                               threshold=0.143,
                               protocol=self.protocol,
