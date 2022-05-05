@@ -77,7 +77,7 @@ class XmippConfidenceMapViewer(LocalResolutionViewer):
         form.addParam('doShowResHistogram', LabelParam,
                       label="Show confidence map histogram")
 
-        group = form.addGroup('Colored resolution Slices and Volumes')
+        group = form.addGroup('Colored Slices and Volumes')
         group.addParam('sliceAxis', EnumParam, default=AX_Z,
                        choices=['x', 'y', 'z'],
                        display=EnumParam.DISPLAY_HLIST,
@@ -94,7 +94,7 @@ class XmippConfidenceMapViewer(LocalResolutionViewer):
                        label='Show slice number')
 
         group.addParam('doShowChimera', LabelParam,
-                       label="Show Resolution map in Chimera")
+                       label="Show confidence map in Chimera")
         group.addParam('structure', PointerParam, pointerClass='AtomStruct',
                        allowsNull=True,
                        label="Structure to be colored",
@@ -179,11 +179,11 @@ class XmippConfidenceMapViewer(LocalResolutionViewer):
         imgData = img.getData()
         imgList = imgData.flatten()
         # imgDataMax = self.getBackGroundValue(imgList)
-        imgListNoZero = imgList  # filter(lambda x: 0 < x < imgDataMax, imgList)
+        imgListNoZero = filter(lambda x: x>0.1, imgList)
         nbins = 10
         plotter = EmPlotter(x=1, y=1, mainTitle="  ")
-        plotter.createSubPlot("Resolution histogram",
-                              "Resolution (A)", "# of Counts")
+        plotter.createSubPlot("Confidence histogram",
+                              "Significance", "# of Counts")
         plotter.plotHist(imgListNoZero, nbins)
         return [plotter]
 
