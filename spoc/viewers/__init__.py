@@ -25,5 +25,5 @@
 # **************************************************************************
 
 from .viewer_fsc_fdr_control import ViewerFscFdrControl
-from .viewer_confidence_map import XmippConfidenceMapViewer
+from .viewer_confidence_map import ProtConfidenceMapViewer
 
