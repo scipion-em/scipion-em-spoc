@@ -31,18 +31,19 @@ from pwem.emlib.image import ImageHandler
 from pwem.objects import FSC, Volume
 from pwem.protocols import ProtAnalysis3D
 
-from pyworkflow.protocol import PointerParam, BooleanParam, FloatParam, IntParam, StringParam
+from pyworkflow.protocol import PointerParam, BooleanParam, FloatParam, \
+    IntParam, StringParam, LEVEL_ADVANCED
 from pyworkflow import BETA
 import pyworkflow.utils as pwutils
 
 import spoc
 
 
-class ProtFscFdrControl(ProtAnalysis3D):
+class ProtResolutionAnalysisFSCFDR(ProtAnalysis3D):
     """
-    Significance analysis of FSC curves
+    Thresholding of FSC curves by FDR control
     """
-    _label = 'FSC-FDR control'
+    _label = 'resolution Analysis'
     _devStatus = BETA
 
     # --------------------------- DEFINE param functions ------------------------
@@ -57,25 +58,35 @@ class ProtFscFdrControl(ProtAnalysis3D):
                       label='Second half map', important=True, condition="halfWhere==False")
         form.addParam('inputVol', PointerParam, pointerClass="Volume",
                       label='Volume with half maps', important=True, condition="halfWhere==True")
-        form.addParam('localRes', BooleanParam, default=False, label='Compute local resolution?')
-        form.addParam('lowRes', FloatParam, default=-1,
-                      label='Set lowest resolution', help='If set to -1, this parameter will not be used')
-        form.addParam('stepSize', IntParam, default=-1,
-                      label='Step size',
+
+        form.addParam('localRes', BooleanParam, default=False, label='Estimate local resolution?')
+        line = form.addLine('Local Resolution Parameters', condition='localRes')
+        form.addParam('mask', PointerParam, pointerClass="Volume", allowsNull=True,
+                      condition='localRes',
+                      label='Mask for local map-model FSC calculation')
+        line.addParam('lowRes', FloatParam, default=-1,
+                      condition='localRes',
+                      label='Lowest resolution', help='If set to -1, this parameter will not be used')
+        line.addParam('stepSize', IntParam, default=-1,
+                      condition='localRes',
+                      label='Step ',
                       help='Voxels to skip for local resolution estimation. '
                            'If set to -1, this parameter will not be used')
-        form.addParam('sym', StringParam, default='c1', label='Volume symmetry',
+        form.addParam('sym', StringParam, condition='localRes',
+                      default='c1',
+                      label='Volume symmetry',
                       help='Symmetry for correction of symmetry effects')
         form.addParam('numAsymUnits', IntParam, default=-1,
                       label='Number of asymmetric units',
+                      expertLevel=LEVEL_ADVANCED,
                       help='Number of asymmetric units for correction of symmetry effects. '
                            'If set to -1, this parameter will not be used')
         form.addParam('bfactor', FloatParam, default=-1,
                       label='B-Factor',
+                      expertLevel=LEVEL_ADVANCED,
                       help='B-Factor for sharpening of the map. '
                            'If set to -1, this parameter will not be used')
-        form.addParam('mask', PointerParam, pointerClass="Volume", allowsNull=True,
-                      label='Mask for local map-model FSC calculation')
+
 
     # --------------------------- INSERT steps functions ------------------------
     def _insertAllSteps(self):
@@ -98,7 +109,7 @@ class ProtFscFdrControl(ProtAnalysis3D):
         ih.convert(file_halfOne, self._getTmpPath('halfone.mrc'))
         ih.convert(file_halfTwo, self._getTmpPath('halftwo.mrc'))
 
-    def computeControlStep(self):
+    def defineCommonArgs(self):
         path_half_one = os.path.abspath(self._getTmpPath('halfone.mrc'))
         path_half_two = os.path.abspath(self._getTmpPath('halftwo.mrc'))
         args = '--halfmap1 %s --halfmap2 %s' \
@@ -109,23 +120,33 @@ class ProtFscFdrControl(ProtAnalysis3D):
         else:
             args += " --apix %f " % self.halfOne.get().getSamplingRate()
 
+        if self.bfactor.get() >= 0:
+            args += ' --bFactor %f' % self.bfactor.get()
+        return args
+
+    def estimateGlobalResolution(self, args):
+        program = spoc.Plugin.getProgram("FSC_FDRcontrol.py")
+        self.runJob(program, args, cwd=self._getExtraPath())
+
+    def computeControlStep(self):
+
+        args = self.defineCommonArgs()
+        self.estimateGlobalResolution(args)
+
         if self.localRes.get():
             args += ' -localResolutions'
 
-        if self.lowRes.get() >= 0:
-            args += ' -lowRes %f' % self.lowRes.get()
+            if self.lowRes.get() >= 0:
+                args += ' -lowRes %f' % self.lowRes.get()
 
-        if self.stepSize.get() >= 0:
-            args += ' --window_size %d' % self.stepSize.get()
+            if self.stepSize.get() >= 0:
+                args += ' --window_size %d' % self.stepSize.get()
 
-        if self.numAsymUnits.get() >= 0:
-            args += ' --numAsymUnits %d' % self.numAsymUnits.get()
+            if self.numAsymUnits.get() >= 0:
+                args += ' --numAsymUnits %d' % self.numAsymUnits.get()
 
-        if self.bfactor.get() >= 0:
-            args += ' --bFactor %f' % self.bfactor.get()
-
-        if self.mask.get():
-            args += ' --mask %s' % abspath(self.mask.get().getFileName())
+            if self.mask.get():
+                args += ' --mask %s' % abspath(self.mask.get().getFileName())
 
         program = spoc.Plugin.getProgram("FSC_FDRcontrol.py")
         self.runJob(program, args, cwd=self._getExtraPath())
@@ -143,21 +164,16 @@ class ProtFscFdrControl(ProtAnalysis3D):
                 self._defineOutputs(outputLocalResMap=_volume)
                 self._defineSourceRelation(self.halfOne, _volume)
                 self._defineSourceRelation(self.halfTwo, _volume)
-        else:
-            # Remove unused files
-            pwutils.cleanPath(self._getExtraPath('FSC.pdf'))
-            pwutils.cleanPath(self._getExtraPath('GuinierPlot.pdf'))
-            pwutils.cleanPath(self._getExtraPath('postProcessed.mrc'))
 
-            _fsc = FSC(objLabel='FSC')
-            data = np.loadtxt(self._getExtraPath('FSC.txt'))
-            _fsc.setData(data[0].tolist(), data[1].tolist())
-            self._defineOutputs(outputFSC=_fsc)
-            if self.halfWhere.get():
-                self._defineSourceRelation(self.inputVol, _fsc)
-            else:
-                self._defineSourceRelation(self.halfOne, _fsc)
-                self._defineSourceRelation(self.halfTwo, _fsc)
+        _fsc = FSC(objLabel='FSC')
+        data = np.loadtxt(self._getExtraPath('FSC.txt'))
+        _fsc.setData(data[0].tolist(), data[1].tolist())
+        self._defineOutputs(outputFSC=_fsc)
+        if self.halfWhere.get():
+            self._defineSourceRelation(self.inputVol, _fsc)
+        else:
+            self._defineSourceRelation(self.halfOne, _fsc)
+            self._defineSourceRelation(self.halfTwo, _fsc)
 
     # --------------------------- INFO functions ------------------------------
     def _methods(self):
