@@ -42,6 +42,76 @@ class ProtFscFdrControl(ProtAnalysis3D):
     """
     Significance analysis of FSC curves
     """
+
+    """
+        FSC-FDR Control (ProtFscFdrControl) — User Manual
+
+            Overview
+
+            The FSC-FDR Control protocol performs significance analysis of
+            Fourier Shell Correlation (FSC) curves using false discovery
+            rate (FDR) statistics. Its main purpose is to provide a more
+            statistically robust estimation of cryo-EM resolution by
+            evaluating the significance of correlations between two half
+            maps.
+
+            Inputs and General Workflow
+
+            The protocol requires two half maps representing independent
+            reconstructions of the same structure. These maps can either
+            be provided directly as separate volumes or extracted from a
+            single input volume containing embedded half maps. Optionally,
+            a mask can be included to restrict the analysis to biologically
+            relevant regions during local resolution estimation.
+
+            During execution, the input maps are converted into compatible
+            formats and processed using the FSC_FDRcontrol program. The
+            protocol computes statistically significant FSC curves while
+            taking into account symmetry, sampling rate, and optional map
+            sharpening parameters.
+
+            Resolution Significance Analysis
+
+            The protocol supports both global FSC significance analysis and
+            local resolution estimation. In the standard mode, the method
+            evaluates the FSC curve and determines the resolution threshold
+            based on FDR statistics, providing a more reliable interpretation
+            of map resolution than fixed FSC cutoffs alone.
+
+            When local resolution analysis is enabled, the protocol computes
+            voxel-dependent resolution estimates across the volume. Additional
+            parameters such as step size, lowest resolution limit, symmetry,
+            number of asymmetric units, and B-factor sharpening can be used
+            to refine the analysis and adapt it to different biological
+            datasets.
+
+            From a biological perspective, careful masking and appropriate
+            symmetry definition are important for avoiding misleading FSC
+            estimations, especially in flexible regions or highly symmetric
+            macromolecular assemblies.
+
+            Outputs and Interpretation
+
+            After execution, the protocol produces either a statistically
+            evaluated FSC curve or a local resolution map, depending on the
+            selected analysis mode. The FSC output can be used to determine
+            the effective resolution of the reconstruction, while the local
+            resolution map allows visualization of structural variability
+            across different regions of the volume.
+
+            The resulting outputs preserve the sampling information from the
+            original maps and can be integrated into downstream cryo-EM
+            interpretation and validation workflows.
+
+            Final Perspective
+
+            ProtFscFdrControl provides a statistically grounded framework
+            for FSC analysis and local resolution estimation in cryo-EM
+            reconstructions. By combining FDR-based significance evaluation
+            with optional local analysis, the protocol helps users obtain
+            more reliable resolution estimates and improve the interpretation
+            of structural quality and heterogeneity in macromolecular maps.
+        """
     _label = 'FSC-FDR control'
     _devStatus = BETA
 
